@@ -32,7 +32,10 @@ export default function Contact() {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/contact', {
+      // Use environment variable for backend URL
+      const API_URL = import.meta.env.VITE_API_URL
+
+      const res = await fetch(`${API_URL}/api/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
