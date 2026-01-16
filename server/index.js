@@ -7,37 +7,36 @@ import 'dotenv/config'
 
 const app = express()
 
-// PORT assigned by Render automatically
 const PORT = process.env.PORT || 5000
-
-// Frontend URL for CORS (set in Render env variables)
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
 // Middleware
 app.use(cors({ origin: FRONTEND_URL }))
 app.use(express.json())
 
-// Health check route
+// Health check
 app.get('/', (req, res) => {
   res.send('Server is running')
 })
 
-// Ensure required environment variables exist
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-  console.error('Missing EMAIL_USER or EMAIL_PASS in environment variables')
+// Validate env
+if (!process.env.SENDGRID_API_KEY || !process.env.EMAIL_USER) {
+  console.error('Missing SENDGRID_API_KEY or EMAIL_USER')
   process.exit(1)
 }
 
-// Nodemailer transporter setup
+// SendGrid transporter (API-based — works on Render free tier)
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.sendgrid.net',
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: 'apikey',
+    pass: process.env.SENDGRID_API_KEY,
   },
 })
 
-// Verify mail server on startup
+// Verify on startup
 transporter.verify((err) => {
   if (err) {
     console.error('Email server error:', err)
@@ -46,12 +45,12 @@ transporter.verify((err) => {
   }
 })
 
-// GET contact API health check
+// Contact API health check
 app.get('/api/contact', (req, res) => {
   res.status(200).json({ message: 'Contact API is running' })
 })
 
-// POST contact form
+// Contact form
 app.post('/api/contact', async (req, res) => {
   const { name, email, message } = req.body
 
@@ -59,18 +58,14 @@ app.post('/api/contact', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' })
   }
 
-  // MX record validation (optional, remove if causes issues)
-  const domain = email.split('@')[1]
+  // Optional MX validation
   try {
-    const mxRecords = await dns.resolveMx(domain)
-    if (!mxRecords || mxRecords.length === 0) {
-      return res.status(400).json({ error: 'Email domain cannot receive mail' })
-    }
-  } catch (err) {
-    return res.status(400).json({ error: 'Invalid or non-existent email domain' })
+    const domain = email.split('@')[1]
+    await dns.resolveMx(domain)
+  } catch {
+    return res.status(400).json({ error: 'Invalid email domain' })
   }
 
-  // Send email
   try {
     await transporter.sendMail({
       from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
@@ -87,7 +82,7 @@ app.post('/api/contact', async (req, res) => {
   }
 })
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
 })
+
