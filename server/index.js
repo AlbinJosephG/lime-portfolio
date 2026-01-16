@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 5000
 app.use(cors({ origin: 'http://localhost:5173' }))
 app.use(express.json())
 
+app.get('/', (req, res) => {
+  res.send('Server is running');
+});
+
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.error('Missing EMAIL_USER or EMAIL_PASS in .env')
   process.exit(1)
