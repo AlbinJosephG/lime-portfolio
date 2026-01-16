@@ -1,8 +1,8 @@
 // server/index.js
 import express from 'express'
 import cors from 'cors'
-import nodemailer from 'nodemailer'
 import dns from 'dns/promises'
+import sgMail from '@sendgrid/mail'
 import 'dotenv/config'
 
 const app = express()
@@ -10,7 +10,6 @@ const app = express()
 const PORT = process.env.PORT || 5000
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173'
 
-// Middleware
 app.use(cors({ origin: FRONTEND_URL }))
 app.use(express.json())
 
@@ -25,25 +24,9 @@ if (!process.env.SENDGRID_API_KEY || !process.env.EMAIL_USER) {
   process.exit(1)
 }
 
-// SendGrid transporter (API-based — works on Render free tier)
-const transporter = nodemailer.createTransport({
-  host: 'smtp.sendgrid.net',
-  port: 587,
-  secure: false,
-  auth: {
-    user: 'apikey',
-    pass: process.env.SENDGRID_API_KEY,
-  },
-})
-
-// Verify on startup
-transporter.verify((err) => {
-  if (err) {
-    console.error('Email server error:', err)
-  } else {
-    console.log('Email server ready')
-  }
-})
+// Configure SendGrid (HTTP API — works on Render Free)
+sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+console.log('SendGrid configured')
 
 // Contact API health check
 app.get('/api/contact', (req, res) => {
@@ -58,7 +41,7 @@ app.post('/api/contact', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' })
   }
 
-  // Optional MX validation
+  // Optional MX check
   try {
     const domain = email.split('@')[1]
     await dns.resolveMx(domain)
@@ -67,9 +50,9 @@ app.post('/api/contact', async (req, res) => {
   }
 
   try {
-    await transporter.sendMail({
-      from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
+    await sgMail.send({
       to: process.env.EMAIL_USER,
+      from: process.env.EMAIL_USER, // must be verified in SendGrid
       replyTo: email,
       subject: `New message from ${name}`,
       text: message,
@@ -77,7 +60,7 @@ app.post('/api/contact', async (req, res) => {
 
     res.status(200).json({ success: true })
   } catch (err) {
-    console.error('Mail error:', err)
+    console.error('SendGrid error:', err.response?.body || err)
     res.status(500).json({ error: 'Failed to send email' })
   }
 })
